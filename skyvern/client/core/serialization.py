@@ -241,23 +241,32 @@ def _get_field_to_alias_name(
     field_to_hint: typing.Dict[str, typing.Any],
 ) -> typing.Dict[str, str]:
     aliases = {}
+    get_alias_from_type = _get_alias_from_type  # Localize function for faster access
     for field, hint in field_to_hint.items():
-        maybe_alias = _get_alias_from_type(hint)
+        maybe_alias = get_alias_from_type(hint)
         if maybe_alias is not None:
             aliases[field] = maybe_alias
     return aliases
 
 
 def _get_alias_from_type(type_: typing.Any) -> typing.Optional[str]:
-    maybe_annotated_type = _get_annotation(type_)
+    maybe_annotated_type = typing_extensions.get_origin(type_)
 
-    if maybe_annotated_type is not None:
-        # The actual annotations are 1 onward, the first is the annotated type
-        annotations = typing_extensions.get_args(maybe_annotated_type)[1:]
+    if maybe_annotated_type is None:
+        return None
+    elif maybe_annotated_type == typing_extensions.NotRequired:
+        type_ = typing_extensions.get_args(type_)[0]
+        maybe_annotated_type = typing_extensions.get_origin(type_)
 
-        for annotation in annotations:
-            if isinstance(annotation, FieldMetadata) and annotation.alias is not None:
-                return annotation.alias
+    if maybe_annotated_type != typing_extensions.Annotated:
+        return None
+
+    # The actual annotations are 1 onward, the first is the annotated type
+    annotations = typing_extensions.get_args(maybe_annotated_type)[1:]
+    for annotation in annotations:
+        if isinstance(annotation, FieldMetadata) and annotation.alias is not None:
+            return annotation.alias
+
     return None
 
 
