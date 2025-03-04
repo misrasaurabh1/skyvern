@@ -153,8 +153,13 @@ def get_path_for_workflow_download_directory(workflow_run_id: str) -> Path:
 
 
 def get_download_dir(workflow_run_id: str | None, task_id: str | None) -> str:
+    # Generate the download directory path
     download_dir = f"{REPO_ROOT_DIR}/downloads/{workflow_run_id or task_id}"
-    os.makedirs(download_dir, exist_ok=True)
+
+    # Only create the directory if it does not already exist
+    if not os.path.exists(download_dir):
+        os.makedirs(download_dir, exist_ok=True)
+
     return download_dir
 
 
