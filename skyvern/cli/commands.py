@@ -1,4 +1,4 @@
-import shutil
+import os
 import subprocess
 import time
 from typing import Optional
@@ -11,7 +11,16 @@ app = typer.Typer()
 
 
 def command_exists(command: str) -> bool:
-    return shutil.which(command) is not None
+    # Split the PATH environment variable to search in each directory
+    paths = os.environ.get("PATH", "").split(os.pathsep)
+
+    # Check each path directory for the command
+    for path in paths:
+        full_path = os.path.join(path, command)
+        if os.path.isfile(full_path):
+            if os.access(full_path, os.X_OK):
+                return True
+    return False
 
 
 def run_command(command: str, check: bool = True) -> tuple[Optional[str], Optional[int]]:
