@@ -348,12 +348,14 @@ class SkyvernElement:
         return await dom.get_skyvern_element_by_id(element_id=element_id)
 
     def find_element_id_in_label_children(self, element_type: InteractiveElement) -> str | None:
-        tag_name = self.get_tag_name()
+        # Cache the value of tag_name to avoid repeated dictionary access and function call.
+        tag_name = self.__static_element.get("tagName", "")
         if tag_name != "label":
             raise ElementIsNotLabel(tag_name)
 
-        children: list[dict] = self.__static_element.get("children", [])
+        children = self.__static_element.get("children", [])
         for child in children:
+            # Access child attributes only once and assign to variables to reduce repeated dictionary access.
             if not child.get("interactable"):
                 continue
 
