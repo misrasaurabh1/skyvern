@@ -10,14 +10,14 @@ class BaseClientWrapper:
     def __init__(self, *, base_url: str, timeout: typing.Optional[float] = None):
         self._base_url = base_url
         self._timeout = timeout
-
-    def get_headers(self) -> typing.Dict[str, str]:
-        headers: typing.Dict[str, str] = {
+        self._headers = {
             "X-Fern-Language": "Python",
             "X-Fern-SDK-Name": "skyvern",
             "X-Fern-SDK-Version": "0.1.56",
-        }
-        return headers
+        }  # Precompute the headers once during initialization
+
+    def get_headers(self) -> typing.Dict[str, str]:
+        return self._headers  # Return the precomputed headers
 
     def get_base_url(self) -> str:
         return self._base_url
