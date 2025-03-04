@@ -231,9 +231,13 @@ def _get_alias_to_field_name(
 ) -> typing.Dict[str, str]:
     aliases = {}
     for field, hint in field_to_hint.items():
-        maybe_alias = _get_alias_from_type(hint)
-        if maybe_alias is not None:
-            aliases[maybe_alias] = field
+        maybe_annotated_type = _get_annotation(hint)
+        if maybe_annotated_type is not None:
+            annotations = typing_extensions.get_args(maybe_annotated_type)[1:]
+            for annotation in annotations:
+                if isinstance(annotation, FieldMetadata) and annotation.alias is not None:
+                    aliases[annotation.alias] = field
+                    break
     return aliases
 
 
