@@ -174,30 +174,34 @@ def clean_element_before_hashing(element: dict) -> dict:
 
 def hash_element(element: dict) -> str:
     hash_ready_element = clean_element_before_hashing(element)
-    # Sort the keys to ensure consistent ordering
     element_string = json.dumps(hash_ready_element, sort_keys=True)
-
     return calculate_sha256(element_string)
 
 
 def build_element_dict(
     elements: list[dict],
 ) -> tuple[dict[str, str], dict[str, dict], dict[str, str], dict[str, str], dict[str, list[str]]]:
-    id_to_css_dict: dict[str, str] = {}
-    id_to_element_dict: dict[str, dict] = {}
-    id_to_frame_dict: dict[str, str] = {}
-    id_to_element_hash: dict[str, str] = {}
-    hash_to_element_ids: dict[str, list[str]] = {}
+    id_to_css_dict = {}
+    id_to_element_dict = {}
+    id_to_frame_dict = {}
+    id_to_element_hash = {}
+    hash_to_element_ids = {}
 
     for element in elements:
-        element_id: str = element.get("id", "")
-        # get_interactable_element_tree marks each interactable element with a unique_id attribute
+        element_id = element.get("id", "")
         id_to_css_dict[element_id] = f"[{SKYVERN_ID_ATTR}='{element_id}']"
         id_to_element_dict[element_id] = element
         id_to_frame_dict[element_id] = element["frame"]
-        element_hash = hash_element(element)
+
+        # Directly calculate hash here without an extra function call
+        hash_ready_element = clean_element_before_hashing(element)
+        element_string = json.dumps(hash_ready_element, sort_keys=True)
+        element_hash = calculate_sha256(element_string)
+
         id_to_element_hash[element_id] = element_hash
-        hash_to_element_ids[element_hash] = hash_to_element_ids.get(element_hash, []) + [element_id]
+        if element_hash not in hash_to_element_ids:
+            hash_to_element_ids[element_hash] = []
+        hash_to_element_ids[element_hash].append(element_id)
 
     return id_to_css_dict, id_to_element_dict, id_to_frame_dict, id_to_element_hash, hash_to_element_ids
 
