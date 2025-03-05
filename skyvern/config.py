@@ -166,7 +166,7 @@ class Settings(BaseSettings):
         """
         :return: True if env is not local, else False
         """
-        return self.ENV != "local"
+        return self._is_cloud
 
     def execute_all_steps(self) -> bool:
         """
@@ -175,10 +175,12 @@ class Settings(BaseSettings):
 
         :return: True if env is not local, else the value of EXECUTE_ALL_STEPS
         """
-        if self.is_cloud_environment():
-            return True
-        else:
-            return self.EXECUTE_ALL_STEPS
+        return self._execute_all_steps
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._is_cloud = self.ENV != "local"
+        self._execute_all_steps = self._is_cloud or self.EXECUTE_ALL_STEPS
 
 
 settings = Settings()
