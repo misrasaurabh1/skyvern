@@ -8,18 +8,7 @@ import pydantic
 # Flattens dicts to be of the form {"key[subkey][subkey2]": value} where value is not a dict
 def traverse_query_dict(dict_flat: Dict[str, Any], key_prefix: Optional[str] = None) -> List[Tuple[str, Any]]:
     result = []
-    for k, v in dict_flat.items():
-        key = f"{key_prefix}[{k}]" if key_prefix is not None else k
-        if isinstance(v, dict):
-            result.extend(traverse_query_dict(v, key))
-        elif isinstance(v, list):
-            for arr_v in v:
-                if isinstance(arr_v, dict):
-                    result.extend(traverse_query_dict(arr_v, key))
-                else:
-                    result.append((key, arr_v))
-        else:
-            result.append((key, v))
+    _traverse(dict_flat, key_prefix, result)
     return result
 
 
@@ -56,3 +45,18 @@ def encode_query(query: Optional[Dict[str, Any]]) -> Optional[List[Tuple[str, An
     for k, v in query.items():
         encoded_query.extend(single_query_encoder(k, v))
     return encoded_query
+
+
+def _traverse(current_dict: Dict[str, Any], current_prefix: Optional[str], result: List[Tuple[str, Any]]):
+    for k, v in current_dict.items():
+        key = f"{current_prefix}[{k}]" if current_prefix is not None else k
+        if isinstance(v, dict):
+            _traverse(v, key, result)
+        elif isinstance(v, list):
+            for arr_v in v:
+                if isinstance(arr_v, dict):
+                    _traverse(arr_v, key, result)
+                else:
+                    result.append((key, arr_v))
+        else:
+            result.append((key, v))
