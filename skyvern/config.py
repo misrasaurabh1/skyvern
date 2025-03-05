@@ -166,7 +166,8 @@ class Settings(BaseSettings):
         """
         :return: True if env is not local, else False
         """
-        return self.ENV != "local"
+        env = self.ENV
+        return env != "local"
 
     def execute_all_steps(self) -> bool:
         """
