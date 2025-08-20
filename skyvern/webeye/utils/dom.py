@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import typing
 from enum import StrEnum
 from random import uniform
@@ -24,7 +23,10 @@ from skyvern.exceptions import (
     NoneFrameError,
     SkyvernException,
 )
-from skyvern.webeye.scraper.scraper import IncrementalScrapePage, ScrapedPage, json_to_html, trim_element
+from skyvern.webeye.scraper.scraper import (
+    IncrementalScrapePage,
+    ScrapedPage,
+)
 from skyvern.webeye.utils.page import SkyvernFrame
 
 LOG = structlog.get_logger()
@@ -148,9 +150,9 @@ class SkyvernElement:
     def build_HTML(self, need_trim_element: bool = True, need_skyvern_attrs: bool = True) -> str:
         element_dict = self.get_element_dict()
         if need_trim_element:
-            element_dict = trim_element(copy.deepcopy(element_dict))
+            element_dict = _trim_element(element_dict.copy())
 
-        return json_to_html(element_dict, need_skyvern_attrs)
+        return _json_to_html(element_dict, need_skyvern_attrs)
 
     async def is_auto_completion_input(self) -> bool:
         tag_name = self.get_tag_name()

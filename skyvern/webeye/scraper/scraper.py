@@ -1,3 +1,4 @@
+from __future__ import annotations
 import asyncio
 import copy
 import json
@@ -98,7 +99,7 @@ def json_to_html(element: dict, need_skyvern_attrs: bool = True) -> str:
     if element is flagged as dropped, the html format is empty
     """
     tag = element["tagName"]
-    attributes: dict[str, Any] = copy.deepcopy(element.get("attributes", {}))
+    attributes: dict[str, Any] = element.get("attributes", {}).copy()
 
     interactable = element.get("interactable", False)
     if element.get("isDropped", False):
@@ -110,23 +111,17 @@ def json_to_html(element: dict, need_skyvern_attrs: bool = True) -> str:
 
     context = skyvern_context.ensure_context()
 
-    # FIXME: Theoretically, all href links with over 69(64+1+4) length could be hashed
-    # but currently, just hash length>150 links to confirm the solution goes well
-    if "href" in attributes and len(attributes.get("href", "")) > 150:
-        href = attributes.get("href", "")
-        # jinja style can't accept the variable name starts with number
-        # adding "_" to make sure the variable name is valid.
+    if "href" in attributes and len(attributes["href"]) > 150:
+        href = attributes["href"]
         hashed_href = "_" + calculate_sha256(href)
         context.hashed_href_map[hashed_href] = href
         attributes["href"] = "{{" + hashed_href + "}}"
 
     if need_skyvern_attrs:
-        # adding the node attribute to attributes
         for attr in ELEMENT_NODE_ATTRIBUTES:
             value = element.get(attr)
-            if value is None:
-                continue
-            attributes[attr] = value
+            if value:
+                attributes[attr] = value
 
     attributes_html = " ".join(build_attribute(key, value) for key, value in attributes.items())
 
@@ -134,23 +129,19 @@ def json_to_html(element: dict, need_skyvern_attrs: bool = True) -> str:
         tag = "select"
 
     text = element.get("text", "")
-    # build children HTML
     children_html = "".join(
         json_to_html(child, need_skyvern_attrs=need_skyvern_attrs) for child in element.get("children", [])
     )
-    # build option HTML
     option_html = "".join(
-        f'<option index="{option.get("optionIndex")}">{option.get("text")}</option>'
-        for option in element.get("options", [])
+        f'<option index="{option["optionIndex"]}">{option["text"]}</option>' for option in element.get("options", [])
     )
 
     if element.get("purgeable", False):
         return children_html + option_html
 
-    before_pseudo_text = element.get("beforePseudoText") or ""
-    after_pseudo_text = element.get("afterPseudoText") or ""
+    before_pseudo_text = element.get("beforePseudoText", "")
+    after_pseudo_text = element.get("afterPseudoText", "")
 
-    # Check if the element is self-closing
     if (
         tag in ["img", "input", "br", "hr", "meta", "link"]
         and not option_html
@@ -158,9 +149,9 @@ def json_to_html(element: dict, need_skyvern_attrs: bool = True) -> str:
         and not before_pseudo_text
         and not after_pseudo_text
     ):
-        return f"<{tag}{attributes_html if not attributes_html else ' ' + attributes_html}>"
+        return f"<{tag}{' ' + attributes_html if attributes_html else ''}>"
     else:
-        return f"<{tag}{attributes_html if not attributes_html else ' ' + attributes_html}>{before_pseudo_text}{text}{children_html + option_html}{after_pseudo_text}</{tag}>"
+        return f"<{tag}{' ' + attributes_html if attributes_html else ''}>{before_pseudo_text}{text}{children_html}{option_html}{after_pseudo_text}</{tag}>"
 
 
 def clean_element_before_hashing(element: dict) -> dict:
@@ -822,53 +813,37 @@ def trim_element(element: dict) -> dict:
     queue = [element]
     while queue:
         queue_ele = queue.pop(0)
-        if "frame" in queue_ele:
-            del queue_ele["frame"]
-
-        if "frame_index" in queue_ele:
-            del queue_ele["frame_index"]
+        queue_ele.pop("frame", None)
+        queue_ele.pop("frame_index", None)
 
         if "id" in queue_ele and not _should_keep_unique_id(queue_ele):
-            del queue_ele["id"]
+            queue_ele.pop("id", None)
 
         if "attributes" in queue_ele:
-            new_attributes = _trimmed_base64_data(queue_ele["attributes"])
+            attributes = queue_ele.pop("attributes")
+            new_attributes = _trimmed_base64_data(attributes)
+            new_attributes.update(_trimmed_attributes(attributes))
             if new_attributes:
                 queue_ele["attributes"] = new_attributes
-            else:
-                del queue_ele["attributes"]
 
-        if "attributes" in queue_ele and not queue_ele.get("keepAllAttr", False):
-            new_attributes = _trimmed_attributes(queue_ele["attributes"])
-            if new_attributes:
-                queue_ele["attributes"] = new_attributes
-            else:
-                del queue_ele["attributes"]
-        # remove the tag, don't need it in the HTML tree
-        if "keepAllAttr" in queue_ele:
-            del queue_ele["keepAllAttr"]
+        queue_ele.pop("keepAllAttr", None)
 
         if "children" in queue_ele:
-            queue.extend(queue_ele["children"])
-            if not queue_ele["children"]:
-                del queue_ele["children"]
+            queue.extend(queue_ele.pop("children"))
+
         if "text" in queue_ele:
-            element_text = str(queue_ele["text"]).strip()
-            if not element_text:
-                del queue_ele["text"]
+            queue_ele_text = str(queue_ele.get("text", "")).strip()
+            if queue_ele_text:
+                queue_ele["text"] = queue_ele_text
+            else:
+                queue_ele.pop("text", None)
 
-        if (
-            "attributes" in queue_ele
-            and "name" in queue_ele["attributes"]
-            and len(queue_ele["attributes"]["name"]) > 500
-        ):
-            queue_ele["attributes"]["name"] = queue_ele["attributes"]["name"][:500]
+        if "attributes" in queue_ele and "name" in queue_ele["attributes"]:
+            if len(queue_ele["attributes"]["name"]) > 500:
+                queue_ele["attributes"]["name"] = queue_ele["attributes"]["name"][:500]
 
-        if "beforePseudoText" in queue_ele and not queue_ele.get("beforePseudoText"):
-            del queue_ele["beforePseudoText"]
-
-        if "afterPseudoText" in queue_ele and not queue_ele.get("afterPseudoText"):
-            del queue_ele["afterPseudoText"]
+        queue_ele.pop("beforePseudoText", None)
+        queue_ele.pop("afterPseudoText", None)
 
     return element
 
