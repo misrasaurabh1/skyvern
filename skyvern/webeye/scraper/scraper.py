@@ -880,14 +880,9 @@ def trim_element_tree(elements: list[dict]) -> list[dict]:
 
 
 def _trimmed_base64_data(attributes: dict) -> dict:
-    new_attributes: dict = {}
-
-    for key in attributes:
-        if key in BASE64_INCLUDE_ATTRIBUTES and "data:" in attributes.get(key, ""):
-            continue
-        new_attributes[key] = attributes[key]
-
-    return new_attributes
+    return {
+        key: value for key, value in attributes.items() if key not in BASE64_INCLUDE_ATTRIBUTES or "data:" not in value
+    }
 
 
 def _trimmed_attributes(attributes: dict) -> dict:
