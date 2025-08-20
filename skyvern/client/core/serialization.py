@@ -60,89 +60,48 @@ def convert_and_respect_annotation_metadata(
         inner_type = annotation
 
     clean_type = _remove_annotations(inner_type)
-    # Pydantic models
-    if (
-        inspect.isclass(clean_type)
-        and issubclass(clean_type, pydantic.BaseModel)
-        and isinstance(object_, typing.Mapping)
-    ):
-        return _convert_mapping(object_, clean_type, direction)
-    # TypedDicts
-    if typing_extensions.is_typeddict(clean_type) and isinstance(object_, typing.Mapping):
-        return _convert_mapping(object_, clean_type, direction)
 
-    if (
-        typing_extensions.get_origin(clean_type) == typing.Dict
-        or typing_extensions.get_origin(clean_type) == dict
-        or clean_type == typing.Dict
-    ) and isinstance(object_, typing.Dict):
-        key_type = typing_extensions.get_args(clean_type)[0]
-        value_type = typing_extensions.get_args(clean_type)[1]
+    if isinstance(object_, typing.Mapping):
+        if inspect.isclass(clean_type) and (
+            issubclass(clean_type, pydantic.BaseModel) or typing_extensions.is_typeddict(clean_type)
+        ):
+            return _convert_mapping(object_, clean_type, direction)
+        if typing_extensions.get_origin(clean_type) in {dict, typing.Dict}:
+            key_type, value_type = typing_extensions.get_args(clean_type)
+            return {
+                key: convert_and_respect_annotation_metadata(
+                    object_=value, annotation=annotation, inner_type=value_type, direction=direction
+                )
+                for key, value in object_.items()
+            }
 
-        return {
-            key: convert_and_respect_annotation_metadata(
-                object_=value,
-                annotation=annotation,
-                inner_type=value_type,
-                direction=direction,
-            )
-            for key, value in object_.items()
-        }
-
-    # If you're iterating on a string, do not bother to coerce it to a sequence.
     if not isinstance(object_, str):
-        if (
-            typing_extensions.get_origin(clean_type) == typing.Set
-            or typing_extensions.get_origin(clean_type) == set
-            or clean_type == typing.Set
-        ) and isinstance(object_, typing.Set):
+        if typing_extensions.get_origin(clean_type) in {set, typing.Set} and isinstance(object_, typing.Set):
             inner_type = typing_extensions.get_args(clean_type)[0]
             return {
                 convert_and_respect_annotation_metadata(
-                    object_=item,
-                    annotation=annotation,
-                    inner_type=inner_type,
-                    direction=direction,
+                    object_=item, annotation=annotation, inner_type=inner_type, direction=direction
                 )
                 for item in object_
             }
-        elif (
-            (
-                typing_extensions.get_origin(clean_type) == typing.List
-                or typing_extensions.get_origin(clean_type) == list
-                or clean_type == typing.List
-            )
-            and isinstance(object_, typing.List)
-        ) or (
-            (
-                typing_extensions.get_origin(clean_type) == typing.Sequence
-                or typing_extensions.get_origin(clean_type) == collections.abc.Sequence
-                or clean_type == typing.Sequence
-            )
-            and isinstance(object_, typing.Sequence)
-        ):
+        elif typing_extensions.get_origin(clean_type) in {
+            list,
+            typing.List,
+            collections.abc.Sequence,
+            typing.Sequence,
+        } and isinstance(object_, (typing.List, typing.Sequence)):
             inner_type = typing_extensions.get_args(clean_type)[0]
             return [
                 convert_and_respect_annotation_metadata(
-                    object_=item,
-                    annotation=annotation,
-                    inner_type=inner_type,
-                    direction=direction,
+                    object_=item, annotation=annotation, inner_type=inner_type, direction=direction
                 )
                 for item in object_
             ]
 
     if typing_extensions.get_origin(clean_type) == typing.Union:
-        # We should be able to ~relatively~ safely try to convert keys against all
-        # member types in the union, the edge case here is if one member aliases a field
-        # of the same name to a different name from another member
-        # Or if another member aliases a field of the same name that another member does not.
         for member in typing_extensions.get_args(clean_type):
             object_ = convert_and_respect_annotation_metadata(
-                object_=object_,
-                annotation=annotation,
-                inner_type=member,
-                direction=direction,
+                object_=object_, annotation=annotation, inner_type=member, direction=direction
             )
         return object_
 
@@ -150,8 +109,6 @@ def convert_and_respect_annotation_metadata(
     if annotated_type is None:
         return object_
 
-    # If the object is not a TypedDict, a Union, or other container (list, set, sequence, etc.)
-    # Then we can safely call it on the recursive conversion.
     return object_
 
 
@@ -165,24 +122,17 @@ def _convert_mapping(
     aliases_to_field_names = _get_alias_to_field_name(annotations)
     for key, value in object_.items():
         if direction == "read" and key in aliases_to_field_names:
-            dealiased_key = aliases_to_field_names.get(key)
-            if dealiased_key is not None:
-                type_ = annotations.get(dealiased_key)
+            dealiased_key = aliases_to_field_names[key]
+            type_ = annotations.get(dealiased_key)
         else:
             type_ = annotations.get(key)
-        # Note you can't get the annotation by the field name if you're in read mode, so you must check the aliases map
-        #
-        # So this is effectively saying if we're in write mode, and we don't have a type, or if we're in read mode and we don't have an alias
-        # then we can just pass the value through as is
-        if type_ is None:
+
+        if type_ is None or (direction == "read" and key not in aliases_to_field_names):
             converted_object[key] = value
-        elif direction == "read" and key not in aliases_to_field_names:
-            converted_object[key] = convert_and_respect_annotation_metadata(
-                object_=value, annotation=type_, direction=direction
-            )
         else:
-            converted_object[_alias_key(key, type_, direction, aliases_to_field_names)] = (
-                convert_and_respect_annotation_metadata(object_=value, annotation=type_, direction=direction)
+            converted_key = _alias_key(key, type_, direction, aliases_to_field_names)
+            converted_object[converted_key] = convert_and_respect_annotation_metadata(
+                object_=value, annotation=type_, direction=direction
             )
     return converted_object
 
@@ -269,4 +219,4 @@ def _alias_key(
 ) -> str:
     if direction == "read":
         return aliases_to_field_names.get(key, key)
-    return _get_alias_from_type(type_=type_) or key
+    return _get_alias_from_type(type_) or key
